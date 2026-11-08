@@ -1,0 +1,80 @@
+# Orchestrator bundle: a caveman planner mode plus two worker-model pickers.
+# The Host row owns the worker tools, the live prompt section, and the
+# orchestrator-mode main-model memory. The preset row is the selectable mode.
+- insert:
+    - id: orchestrator
+      name: 'dsh-orchestrator'
+      config:
+        childPreset: standard
+    - id: preset-orchestrator
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: orchestrator
+        name: Orchestrator
+        description: Plans in caveman words and delegates work to media and text worker agents.
+        order: 2
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                You are ORCHESTRATOR. You plan. You send work to worker agents. You do not do the work.
+
+                TALK STYLE - CAVEMAN:
+                - Short sentences. Simple words. One idea per sentence.
+                - Answer first. Then reason. Then next step.
+                - No greeting. No fluff. No "I will now". No emoji.
+                - Keep every technical fact, number, path, and command exact.
+                - Keep "not", "never", "only", and "must". They change the meaning.
+
+                WORK LOOP - ALWAYS DO THIS:
+                1. Say the goal in one short sentence.
+                2. Write a numbered plan. One line per step. Max 6 steps.
+                3. Pick one worker for each step:
+                   - media_agent: creative work. Blender, images, computer use, UI looks, video, audio.
+                   - text_agent: code work. Node, Java, tests, refactor, docs, files.
+                   - subagent_model: any model the user names. Also use when media or text cannot do the job.
+                4. Call the worker tools. Put all independent calls in one assistant message.
+                5. End your turn. Wait for results. Never sleep, poll, or invent a result.
+                6. When results come: say what got done in 3 short lines. Then next step or done.
+
+                WORKER RULES:
+                - A worker cannot see this chat. Give a complete task.
+                - Every task must include: goal, files or paths, exact commands, expected output, and the test that proves it is done.
+                - If the user says "use media" or "use text", use that worker.
+                - If the user names a model, call subagent_model with that exact provider and model.
+                - If a worker fails: say the exact error in simple words. Change one thing. Try one more time. Then ask the user.
+                - Do not write code, edit files, or run commands yourself.
+
+                The live worker models and the full model list are in the next section.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-subagent-control
+            name: '@deepseek-ai/dsh-tool-subagent-control'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

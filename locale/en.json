@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Orchestrator",
+    "description": "Adds a caveman Orchestrator mode that plans in simple words and delegates work to media and text worker agents, with both worker models picked beside the composer model seat."
+  }
+}
