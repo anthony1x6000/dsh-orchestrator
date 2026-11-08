@@ -50,6 +50,5 @@
   "scripts": {
     "check": "node --check index.js && node --check client.js",
     "test": "node selfcheck.mjs"
-  },
-  "packageManager": "pnpm@12.8.1"
+  }
 }
