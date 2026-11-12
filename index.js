@@ -31,6 +31,9 @@ const PRESET_ID = 'orchestrator'
 /** Settings namespace (also the Loader row id) the composer pickers write. */
 const SETTINGS_NS = 'orchestrator'
 
+/** Session ids switched on with /orchestrate, alongside the preset sessions. */
+const orchestratedSessions = new Set()
+
 /**
  * Config schema. Every field is volatile: a picker save applies without
  * remounting the Host plugin, and the runtime reads the live value each time.
@@ -165,24 +168,41 @@ export function apply(ctx, config) {
     return session?.header?.agentPreset
   }
 
+  /** Durable identity of a Session, whether live or a plain fake. */
+  function sessionId(session) {
+    const id = session?.header?.id ?? session?.id
+    return typeof id === 'string' && id.length > 0 ? id : undefined
+  }
+
   function isOrchestratorSession(session) {
-    return session !== undefined && presetOf(session) === PRESET_ID
+    return session !== undefined && session !== null && presetOf(session) === PRESET_ID
+  }
+
+  /** True for a Session switched on with /orchestrate. */
+  function isMarkedSession(session) {
+    const id = sessionId(session)
+    return id !== undefined && orchestratedSessions.has(id)
+  }
+
+  /** Sessions on the preset, plus sessions switched on with /orchestrate. */
+  function hasWorkerAccess(session) {
+    return isOrchestratorSession(session) || isMarkedSession(session)
   }
 
   function isOrchestratorAgent(agent) {
     try {
-      return agent !== undefined && agent !== null && isOrchestratorSession(agent.session)
+      return agent !== undefined && agent !== null && hasWorkerAccess(agent.session)
     } catch {
       return false
     }
   }
 
-  /** The prompt block the Orchestrator preset sees before every step. */
-  function workerSectionText() {
+  /** The prompt block an orchestrator session sees before every step. */
+  function workerSectionText(marked = false) {
     const models = catalog.ready && catalog.lines.length > 0
       ? catalog.lines
       : '(model list is loading or empty; call list_models)'
-    return [
+    const lines = [
       'ORCHESTRATOR WORKER ROUTES (live):',
       `media_agent -> ${formatSelection(storedSelection('media'))}`,
       `text_agent -> ${formatSelection(storedSelection('text'))}`,
@@ -190,16 +210,52 @@ export function apply(ctx, config) {
       '',
       'If a route says NOT SET, ask the user to pick that model in the composer bar. Do not guess.',
       '',
-      'ALL MODELS:',
-      models,
-    ].join('\n')
+    ]
+    if (marked) {
+      lines.push(
+        'delegate code work with text_agent, creative work with media_agent, another model with subagent_model; give workers complete tasks; end the turn while they run.',
+        '',
+      )
+    }
+    lines.push('ALL MODELS:', models)
+    return lines.join('\n')
   }
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'orchestrator:workers',
     order: ctx.systemPrompt.getSectionOrder('TOOL_SUBAGENT') + 1,
-    text: (context) => (isOrchestratorAgent(context.scope) ? workerSectionText() : ''),
+    text: (context) => {
+      if (!isOrchestratorAgent(context.scope)) return ''
+      return workerSectionText(isMarkedSession(context.scope))
+    },
   }), 'orchestrator: worker prompt section')
+
+  // ---------------------------------------------------------- /orchestrate
+  ctx.effect(() => {
+    const commands = ctx.get('commands')
+    if (commands === undefined || typeof commands.register !== 'function') return
+    return commands.register({
+      definitionId: 'dsh-orchestrator/orchestrate',
+      name: 'orchestrate',
+      description: 'Make this session delegate work to dsh-orchestrator workers',
+      input: { hint: '[off]' },
+      handler(invocation) {
+        const id = sessionId(invocation?.agent?.session)
+        if (id === undefined) return { kind: 'error', text: 'cannot identify this session' }
+        const input = typeof invocation.rawInput === 'string' ? invocation.rawInput.trim() : ''
+        if (input === 'off') {
+          orchestratedSessions.delete(id)
+          return { kind: 'success', text: 'orchestrator off. Worker tools are hidden for this session.' }
+        }
+        if (input.length > 0) return { kind: 'error', text: 'usage: /orchestrate [off]' }
+        orchestratedSessions.add(id)
+        return {
+          kind: 'success',
+          text: `orchestrator on. media worker: ${formatSelection(storedSelection('media'))}. text worker: ${formatSelection(storedSelection('text'))}.`,
+        }
+      },
+    })
+  }, 'orchestrator: orchestrate command')
 
   // -------------------------------------------------------------- delegation
   /** Start one managed child on an exact route. */
