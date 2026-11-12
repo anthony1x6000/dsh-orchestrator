@@ -27,7 +27,8 @@ The bundle adds:
 - Agent preset **Orchestrator** (pick it in New Session or the preset picker).
 - Composer controls **Media** and **Text**, left of the main model seat.
 - Host tools `media_agent`, `text_agent`, `subagent_model`, and `list_models`,
-  visible only inside the Orchestrator preset.
+  visible inside the Orchestrator preset or any chat switched on with
+  `/orchestrate`.
 
 ## Use
 
@@ -45,6 +46,26 @@ The user can say which worker to use:
 
 The orchestrator speaks caveman: short sentences, simple words, every technical
 fact kept. Worker prompts stay normal technical English.
+
+## Any chat: /orchestrate
+
+A chat that is not on the Orchestrator preset can opt in:
+
+```text
+/orchestrate
+```
+
+The session gets the worker tools and the orchestrator prompt, with the same
+global Media and Text routes. The reply names the media and text worker models,
+or says `NOT SET`. `/orchestrate off` turns the session off. Any other argument
+replies with usage `/orchestrate [off]`.
+
+## Workers in the header roster
+
+Workers start through the harness `spawn` subagent provider, so they appear in
+the session header roster: the **jobs** control next to background jobs
+(package `dsh-client-ui-jobs`). Open it to watch or stop a worker. The
+orchestrator ends its turn while they run and reports when one finishes.
 
 ## Headless text worker
 
@@ -87,8 +108,10 @@ remounting the plugin.
   is the config editor, and volatile fields update in place.
 - The Media/Text controls register in the `conversation.input.right` slot, which
   renders immediately before `conversation.input.model` in the composer toolbar.
-- The Host gate checks the live Agent preset, so the worker tools and the worker
-  prompt block never appear in Standard, PTC, Minimal, or worker children.
+- The Host gate checks the live Agent preset plus a Set of session ids marked by
+  `/orchestrate`, so Standard, PTC, Minimal, and worker children stay clean.
+- `/orchestrate` registers only when the optional `commands` service is present;
+  the plugin still loads without it. The registration is an effect disposable.
 - Delegation uses the in-process `spawn` provider, `delivery: 'parent'`, and the
   configured child preset. The orchestrator gets completion notices; it does not
   block a turn waiting.

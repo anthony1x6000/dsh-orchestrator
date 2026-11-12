@@ -5,14 +5,24 @@ import { apply, Config } from './index.js'
 function makeContext(config, options = {}) {
   const tools = new Map()
   const sections = new Map()
+  const commands = new Map()
   const effects = []
   const listeners = new Map()
   const activations = []
+  const commandService = options.commands === undefined
+    ? undefined
+    : {
+      register(definition) {
+        commands.set(definition.name, definition)
+        return () => commands.delete(definition.name)
+      },
+    }
   const ctx = {
     fiber: { entry: options.entry },
     logger: { warn: () => {} },
     get(name) {
       if (name === 'configEditor') return options.editor
+      if (name === 'commands') return commandService
       return undefined
     },
     inject: () => {},
@@ -55,17 +65,17 @@ function makeContext(config, options = {}) {
     },
   }
   apply(ctx, config)
-  return { ctx, tools, sections, effects, listeners, activations }
+  return { ctx, tools, sections, commands, effects, listeners, activations }
 }
 
 const orchestratorAgent = {
   id: 's1',
-  session: { header: { agentPreset: 'orchestrator' }, requestHeader: () => undefined },
+  session: { header: { id: 's1', agentPreset: 'orchestrator' }, requestHeader: () => undefined },
   model: { current: () => undefined, select: () => {} },
 }
 const standardAgent = {
   id: 's2',
-  session: { header: { agentPreset: 'standard' } },
+  session: { header: { id: 's2', agentPreset: 'standard' } },
 }
 const exec = { agent: orchestratorAgent, signal: new AbortController().signal }
 
@@ -202,6 +212,46 @@ const config = {
   }
   await listeners.get('agent/created')[0]({ agent: other, source: 'startup' })
   assert.equal(otherSelected.length, 0, 'other presets do not take the orchestrator model')
+}
+
+{
+  const { tools, sections, commands } = makeContext(config, { commands: true })
+  const command = commands.get('orchestrate')
+  assert.ok(command, 'orchestrate command registered')
+  assert.equal(command.definitionId, 'dsh-orchestrator/orchestrate')
+  assert.equal(command.input.hint, '[off]')
+
+  const session = { header: { id: 's3', agentPreset: 'standard' } }
+  const agent = { id: 's3', session }
+  const invocation = (rawInput) => ({ agent, rawInput, attachments: [], signal: new AbortController().signal })
+
+  const on = command.handler(invocation(''))
+  assert.equal(on.kind, 'success', 'bare /orchestrate succeeds')
+  assert.match(on.text, /media worker: media-p\/media-m/, 'reply names the media worker')
+  assert.match(on.text, /text worker: text-p\/text-m/, 'reply names the text worker')
+  assert.equal(tools.get('media_agent').options.when({ agent }), true, 'worker tool visible after /orchestrate')
+  assert.match(
+    sections.get('orchestrator:workers').text({ scope: agent }),
+    /delegate code work with text_agent, creative work with media_agent, another model with subagent_model/,
+    'marked session gets the delegation line',
+  )
+  assert.equal(tools.get('media_agent').options.when({ agent: standardAgent }), false, 'other standard session stays off')
+
+  const bad = command.handler(invocation('bogus'))
+  assert.equal(bad.kind, 'error', 'bad argument errors')
+  assert.match(bad.text, /\/orchestrate \[off\]/, 'error shows usage')
+  assert.equal(tools.get('media_agent').options.when({ agent }), true, 'bad argument leaves the mark alone')
+
+  const off = command.handler(invocation(' off'))
+  assert.equal(off.kind, 'success', '/orchestrate off succeeds')
+  assert.equal(tools.get('media_agent').options.when({ agent }), false, 'worker tool hidden after /orchestrate off')
+  assert.equal(sections.get('orchestrator:workers').text({ scope: agent }), '', 'prompt section empty after off')
+}
+
+{
+  const { tools, commands } = makeContext(config)
+  assert.equal(commands.size, 0, 'no command registered without a commands service')
+  assert.ok(tools.get('media_agent'), 'plugin still loads without a commands service')
 }
 
 console.log('orchestrator selfcheck ok')
