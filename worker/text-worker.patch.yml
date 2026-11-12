@@ -1,0 +1,22 @@
+# Overlay for `dsh --profile <headless profile> --patch`: the text worker of the Orchestrator, run headless.
+# Same provider row as the web profile; the key comes from OPENCODE_GO_API_KEY or ~/.dsh/.credentials.yaml.
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      opencode-go:
+        models:
+          - id: deepseek-v4.1-flash
+            name: DeepSeek V4.1 Flash
+            contextWindow: 1000000
+            maxTokens: 384000
+            input:
+              - text
+              - image
+        apiKeyEnv: OPENCODE_GO_API_KEY
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    reasoningEffort: high

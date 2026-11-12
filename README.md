@@ -46,6 +46,20 @@ The user can say which worker to use:
 The orchestrator speaks caveman: short sentences, simple words, every technical
 fact kept. Worker prompts stay normal technical English.
 
+## Headless text worker
+
+Agents outside the Orchestrator preset (a Claude Code session driving dsh, a script) can hand code work to the same
+text worker without the web app:
+
+```sh
+bin/dsh-text-worker --workdir /path/to/repo "implement X, run the tests, report"
+bin/dsh-text-worker --model glm-5.3-flash - < task.md
+```
+
+It boots the headless profile (`DSH_WORKER_PROFILE`, default `headlesS`) with `worker/text-worker.patch.yml`
+(opencode-go / DeepSeek V4.1 Flash), full file access, no approvals. The key comes from `OPENCODE_GO_API_KEY` or the one
+the web profile stored in `~/.dsh/.credentials.yaml`. Answer on stdout; stderr ends with `WORKER EXIT <code>`.
+
 ## Model memory
 
 The last main model used in an Orchestrator chat is remembered for the next
