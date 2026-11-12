@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run one task headless on the Orchestrator's text worker model (opencode-go / DeepSeek V4.1 Flash by default).
+#   bin/dsh-text-worker [--model id] [--workdir dir] "task"   (or "-" to read the task from stdin)
+# The answer goes to stdout; diagnostics and a final "WORKER EXIT <code>" line to stderr, so a failed run is obvious.
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+profile="${DSH_WORKER_PROFILE:-headlesS}"
+model="deepseek-v4.1-flash"
+workdir="$PWD"
+while [[ $# -gt 1 ]]; do
+  case "$1" in
+    --model) model="$2"; shift 2 ;;
+    --workdir) workdir="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+if [[ -z "${OPENCODE_GO_API_KEY:-}" ]]; then
+  # Headless profiles do not load the credentials service: take the key the web profile stored.
+  OPENCODE_GO_API_KEY="$(python3 -c 'import os,yaml; print(yaml.safe_load(open(os.path.expanduser("~/.dsh/.credentials.yaml")))["refs"]["OPENCODE_GO_API_KEY"])' 2>/dev/null)"
+  export OPENCODE_GO_API_KEY
+fi
+[[ -n "${OPENCODE_GO_API_KEY:-}" ]] || { echo "WORKER FAILED: no OPENCODE_GO_API_KEY (env or ~/.dsh/.credentials.yaml)" >&2; exit 2; }
+patch="$(mktemp --suffix=.yml)"
+trap 'rm -f "$patch"' EXIT
+sed "s/deepseek-v4.1-flash/$model/g" "$here/worker/text-worker.patch.yml" > "$patch"
+cd "$workdir" || { echo "WORKER FAILED: no workdir $workdir" >&2; exit 2; }
+dsh --profile "$profile" --patch "$patch" --permission-mode danger-full-access --approval-policy never "$@"
+code=$?
+echo "WORKER EXIT $code" >&2
+exit $code

@@ -48,7 +48,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js",
+    "check": "node --check index.js && node --check client.js && bash -n bin/dsh-text-worker",
     "test": "node selfcheck.mjs"
   }
 }
